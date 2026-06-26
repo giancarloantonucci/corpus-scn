@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Editor dû corpus</title>
+    <style>
+        :root {
+            --bg: #f7f7f5;
+            --panel: #fff;
+            --ink: #2c3e50;
+            --muted: #6b7280;
+            --line: #e5e7eb;
+            --accent: #2c3e50;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            background: var(--bg);
+            color: #333;
+            line-height: 1.5;
+        }
+
+        /* --- top bar --- */
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding: 12px 18px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--line);
+        }
+
+        header h1 {
+            font-size: 18px;
+            margin: 0 12px 0 0;
+            color: var(--ink);
+        }
+
+        button {
+            font: inherit;
+            font-size: 14px;
+            padding: 7px 12px;
+            border: 1px solid var(--line);
+            background: #fff;
+            border-radius: 7px;
+            cursor: pointer;
+            color: #333;
+        }
+
+        button:hover { background: #f0f0ef; }
+
+        button.primary {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+
+        button.primary:hover { opacity: .9; }
+
+        .spacer { flex: 1; }
+
+        /* --- tab bar (browser-style) --- */
+        .tabbar {
+            display: flex;
+            align-items: flex-end;
+            gap: 4px;
+            padding: 6px 14px 0;
+            background: var(--panel);
+            border-bottom: 1px solid var(--line);
+        }
+
+        #text-list {
+            display: flex;
+            align-items: flex-end;
+            gap: 4px;
+            flex: 1;
+            min-width: 0;
+            overflow-x: auto;
+            scrollbar-width: thin;
+        }
+
+        .text-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            max-width: 200px;
+            padding: 8px 12px;
+            border: 1px solid var(--line);
+            border-bottom: none;
+            border-radius: 8px 8px 0 0;
+            background: #efeeec;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.2;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+
+        .text-item span { overflow: hidden; text-overflow: ellipsis; }
+        .text-item:hover { background: #e7e6e4; }
+
+        .text-item.active {
+            background: var(--panel);
+            color: var(--ink);
+            font-weight: 600;
+            border-top: 2px solid var(--accent);
+            padding-top: 7px;
+            box-shadow: 0 1px 0 0 var(--panel);
+            position: relative;
+            z-index: 1;
+        }
+
+        .text-item .del {
+            opacity: 0;
+            border: none;
+            background: none;
+            padding: 0 2px;
+            color: #ef4444;
+            font-size: 14px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+        .text-item:hover .del,
+        .text-item.active .del { opacity: 1; }
+
+        .tab-new {
+            flex-shrink: 0;
+            margin-bottom: 4px;
+            padding: 5px 11px;
+            font-size: 16px;
+            line-height: 1;
+            border-radius: 7px;
+        }
+
+        /* --- layout --- */
+        main { display: block; min-height: calc(100vh - 60px); }
+
+        .editor {
+            padding: 28px clamp(16px, 4vw, 48px) 72px;
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .meta {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            max-width: 520px;
+            margin-bottom: 36px;
+        }
+
+        .meta .field { display: flex; flex-direction: column; }
+
+        .meta label {
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: .02em;
+            color: var(--muted);
+            margin-bottom: 5px;
+        }
+
+        .meta input {
+            font: inherit;
+            padding: 10px 12px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            width: 100%;
+            background: #fff;
+        }
+
+        .meta input:focus {
+            outline: none;
+            border-color: #94a3b8;
+        }
+
+        .hint {
+            font-size: 13px;
+            color: var(--muted);
+            margin: 0 0 16px;
+        }
+
+        /* --- paragraph rows --- */
+        .row {
+            display: flex;
+            gap: 18px;
+            margin-bottom: 14px;
+            position: relative;
+            align-items: flex-start;
+        }
+
+        .box {
+            flex: 1;
+            min-height: 56px;
+            padding: 12px 14px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #fff;
+            font-size: 17px;
+            line-height: 1.75;
+            outline: none;
+        }
+
+        .box:focus-within, .box:focus { border-color: #94a3b8; }
+        .box.ita { color: #555; font-style: italic; }
+        .box.eng { color: #555; font-style: italic; }
+
+        .box:empty::before {
+            content: attr(data-ph);
+            color: #b9bcc2;
+        }
+
+        .row .row-del {
+            border: none;
+            background: none;
+            color: #cbd0d6;
+            font-size: 18px;
+            line-height: 1;
+            padding: 4px;
+            cursor: pointer;
+            align-self: center;
+        }
+        .row:hover .row-del { color: #ef4444; }
+
+        /* --- note highlights inside the editor --- */
+        .box note-scn {
+            border-radius: 3px;
+            padding: 0 2px;
+            cursor: pointer;
+        }
+        .box note-scn[data-type="ETIMULUGGÌA"] { background: #ffa39e; }
+        .box note-scn[data-type="SINTASSI"]    { background: #b7eb8f; }
+        .box note-scn[data-type="LÈSSICU"]     { background: #adc6ff; }
+        .box note-scn[data-type="FUNÈTICA"]    { background: #ffe58f; }
+        .box note-scn[data-type="GLOSSA"]      { background: #d3adf7; }
+        .box note-scn[data-type="DUBBIU"]      { background: #f5f5f5; border-bottom: 2px dashed #ff4d4f; }
+
+        .add-row { margin: 6px 0 36px; }
+
+        .export-bar {
+            border-top: 1px solid var(--line);
+            padding-top: 22px;
+            margin-top: 8px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        button.ghost {
+            background: transparent;
+            border-color: var(--accent);
+            color: var(--accent);
+            font-weight: 600;
+        }
+        button.ghost:hover { background: #eef1f4; }
+
+        /* --- annotation popover --- */
+        #pop {
+            position: fixed;
+            z-index: 200;
+            width: 300px;
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, .18);
+            padding: 12px;
+            display: none;
+        }
+
+        #pop.open { display: block; }
+
+        .swatches { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+
+        .swatch {
+            font-size: 11px;
+            padding: 5px 8px;
+            border-radius: 6px;
+            border: 2px solid transparent;
+            cursor: pointer;
+            color: #1f2937;
+        }
+        .swatch.sel { border-color: #2c3e50; }
+
+        #pop textarea {
+            width: 100%;
+            min-height: 64px;
+            font: inherit;
+            font-size: 14px;
+            padding: 8px;
+            border: 1px solid var(--line);
+            border-radius: 7px;
+            resize: vertical;
+        }
+
+        #pop .pop-actions { display: flex; gap: 8px; margin-top: 10px; }
+        #pop .pop-actions .spacer { flex: 1; }
+        #pop button { padding: 6px 11px; font-size: 13px; }
+        #remove { color: #ef4444; border-color: #f3c0c0; }
+
+        /* --- empty state --- */
+        .empty {
+            text-align: center;
+            color: var(--muted);
+            margin-top: 12vh;
+            padding: 0 20px;
+        }
+        .empty h2 { color: var(--ink); }
+
+        @media (max-width: 720px) {
+            .row { flex-direction: column; gap: 10px; }
+            .box { font-size: 16px; min-height: 48px; }
+            .meta { max-width: none; }
+            .row .row-del { align-self: flex-end; }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="topbar">
+        <header>
+            <h1>Editor dû corpus</h1>
+            <button id="btn-import">Càrrica HTML...</button>
+            <div class="spacer"></div>
+            <button id="btn-load-proj">Grapi pruggettu</button>
+            <button id="btn-save-proj">Sarba pruggettu</button>
+        </header>
+        <nav class="tabbar">
+            <div id="text-list"></div>
+            <button id="btn-new" class="tab-new" title="Testu novu">+</button>
+        </nav>
+    </div>
+
+    <main>
+        <section class="editor" id="editor">
+            <div class="empty" id="empty">
+                <h2>Nuḍḍu testu graputu</h2>
+                <p>Accuminza un <strong>testu novu</strong>, <strong>càrrica</strong> un pricu HTML o grapi un pruggettu.</p>
+            </div>
+
+            <div id="workspace" hidden>
+                <div class="meta">
+                    <div class="field">
+                        <label>Tìtulu</label>
+                        <input id="f-title" placeholder="A FAMIGGHIA">
+                    </div>
+                    <div class="field">
+                        <label>Nomu pricu</label>
+                        <input id="f-file" placeholder="a_famigghia.html">
+                    </div>
+                </div>
+
+                <p class="hint">Signalija na picca di testu, scarta un culuri e scrivi na nota. Munci na parti signalijata pi cancialla o pi livalla.</p>
+
+                <div id="rows"></div>
+                <button class="add-row" id="btn-add-row">+ Junci paràgrafu</button>
+
+                <div class="export-bar">
+                    <button class="primary" id="btn-export">Esporta testu (.html)</button>
+                    <button id="btn-index">Esporta index.html</button>
+                    <button id="btn-export-all">Esporta tutti i testi</button>
+                    <div class="spacer"></div>
+                    <button class="ghost" id="btn-preview">Antiprima</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- annotation popover -->
+    <div id="pop">
+        <div class="swatches" id="swatches"></div>
+        <textarea id="pop-note" placeholder="Testu dâ nota..."></textarea>
+        <div class="pop-actions">
+            <button id="remove" hidden>Leva</button>
+            <div class="spacer"></div>
+            <button id="pop-cancel">Sfai</button>
+            <button class="primary" id="pop-save">Sarba</button>
+        </div>
+    </div>
+
+    <input type="file" id="file-html" accept=".html,.htm" hidden multiple>
+    <input type="file" id="file-proj" accept=".json" hidden>
+
+    <script>
+        "use strict";
+
+        /* ---------- note types (ids match stili.css exactly) ---------- */
+        const TYPES = [
+            { id: "ETIMULUGGÌA", color: "#ffa39e" },
+            { id: "SINTASSI", color: "#b7eb8f" },
+            { id: "LÈSSICU", color: "#adc6ff" },
+            { id: "FUNÈTICA", color: "#ffe58f" },
+            { id: "GLOSSA", color: "#d3adf7" },
+            { id: "DUBBIU", color: "#f5f5f5" }
+        ];
+
+        // legacy type ids from earlier files -> current ids
+        const TYPE_ALIASES = { SCHICU: "GLOSSA", BUH: "DUBBIU" };
+
+        /* ---------- the cleaned stylesheet (single source of truth) ---------- */
+        const STILI_CSS = `:root {
+    --text: #333;
+    --heading: #2c3e50;
+    --translation: #555;
+    --rule: #ecf0f1;
+    --tooltip-bg: #2c3e50;
+    --tooltip-text: #fff;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.8;
+    max-width: 1100px;
+    margin: 40px auto;
+    padding: 0 20px;
+    color: var(--text);
+}
+
+h1 {
+    text-align: center;
+    color: var(--heading);
+    border-bottom: 2px solid var(--rule);
+    padding-bottom: 10px;
+}
+
+p {
+    font-size: 18px;
+}
+
+/* --- ANNOTATED WORDS --- */
+
+note-scn {
+    position: relative;
+    display: inline;
+    padding: 0 2px;
+    border-radius: 3px;
+    cursor: help;
+}
+
+note-scn:focus {
+    outline: 2px solid var(--heading);
+    outline-offset: 1px;
+}
+
+/* The pop-up box */
+note-scn::after {
+    content: attr(data-note);
+    position: absolute;
+    bottom: 135%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: 250px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background-color: var(--tooltip-bg);
+    color: var(--tooltip-text);
+    font-size: 14px;
+    font-style: normal;
+    line-height: 1.4;
+    text-align: left;
+    white-space: normal;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.15s ease-in-out;
+    z-index: 9999;
+}
+
+/* Show on hover (mouse) and on focus (keyboard / tap) */
+note-scn:hover::after,
+note-scn:focus::after {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Highlight colour by note-scn type */
+note-scn[data-type="ETIMULUGGÌA"] { background-color: #ffa39e; }
+note-scn[data-type="SINTASSI"]    { background-color: #b7eb8f; }
+note-scn[data-type="LÈSSICU"]     { background-color: #adc6ff; }
+note-scn[data-type="FUNÈTICA"]    { background-color: #ffe58f; }
+note-scn[data-type="GLOSSA"]      { background-color: #d3adf7; }
+
+note-scn[data-type="DUBBIU"] {
+    background-color: #f5f5f5;
+    border-bottom: 2px dashed #ff4d4f;
+}
+
+/* --- SIDE-BY-SIDE TRANSLATION LAYOUT --- */
+
+.text-row {
+    display: flex;
+    gap: 32px;
+    align-items: flex-start;
+}
+
+.column-scn,
+.column-ita,
+.column-eng {
+    flex: 1;
+    text-align: justify;
+}
+
+.column-ita,
+.column-eng {
+    color: var(--translation);
+    font-style: italic;
+}
+
+/* Stack the columns on narrow screens */
+@media (max-width: 900px) {
+    .text-row {
+        flex-direction: column;
+        gap: 15px;
+    }
+}
+
+/* Honour the reader's reduced-motion setting */
+@media (prefers-reduced-motion: reduce) {
+    note-scn::after {
+        transition: none;
+    }
+}
+`;
+
+        /* ---------- state ---------- */
+        let project = { texts: [] };
+        let current = -1;
+
+        const $ = sel => document.querySelector(sel);
+        const uid = () => Math.random().toString(36).slice(2, 9);
+
+        /* ---------- helpers: escaping & slug ---------- */
+        const escText = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const escAttr = s => escText(s).replace(/"/g, "&quot;");
+
+        function slug(s) {
+            return (s || "testu").toLowerCase()
+                .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                .replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "testu";
+        }
+
+        /* ---------- clean serialization of a contenteditable box ---------- */
+        function serializeBox(box) {
+            return walk(box).replace(/^\s+|\s+$/g, "");
+            function walk(parent) {
+                let out = "";
+                parent.childNodes.forEach(n => {
+                    if (n.nodeType === 3) {
+                        out += escText(n.nodeValue).replace(/\s+/g, " ");
+                    } else if (n.nodeType === 1) {
+                        const tag = n.tagName.toLowerCase();
+                        if (tag === "note-scn") {
+                            const tipo = n.getAttribute("data-type") || "";
+                            const nota = n.getAttribute("data-note") || "";
+                            const inner = escText(n.textContent).replace(/\s+/g, " ").trim();
+                            out += `<note-scn tabindex="0" data-type="${escAttr(tipo)}" data-note="${escAttr(nota)}">${inner}</note-scn>`;
+                        } else if (tag === "br") {
+                            out += " ";
+                        } else {
+                            const block = /^(div|p)$/.test(tag);
+                            if (block) out += " ";
+                            out += walk(n);
+                            if (block) out += " ";
+                        }
+                    }
+                });
+                return out;
+            }
+        }
+
+        /* ---------- build the export HTML ---------- */
+        function buildText(t) {
+            const rows = (t.rows.length ? t.rows : [{ scn: "", ita: "", eng: "" }]).map(r =>
+`    <div class="text-row">
+        <div class="column-scn">
+            <p>${r.scn || "..."}</p>
+        </div>
+        <div class="column-ita" lang="it">
+            <p>${r.ita || "..."}</p>
+        </div>
+        <div class="column-eng" lang="en">
+            <p>${r.eng || "..."}</p>
+        </div>
+    </div>`).join("\n\n");
+
+            return `<!DOCTYPE html>
+<html lang="scn">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${escText(t.title || "Testu")}</title>
+    <link rel="stylesheet" href="stili.css">
+</head>
+
+<body>
+
+    <h1>${escText(t.title || "Testu")}</h1>
+
+${rows}
+
+</body>
+
+</html>
+`;
+        }
+
+        function buildIndex() {
+            const items = project.texts.map(t =>
+                `        <li><a href="${escAttr(t.filename)}">${escText(t.title || t.filename)}</a></li>`
+            ).join("\n");
+            return `<!DOCTYPE html>
+<html lang="scn">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Corpus sicilianu</title>
+    <link rel="stylesheet" href="stili.css">
+</head>
+
+<body>
+    <h1>Corpus sicilianu</h1>
+    <p>Testi siciliani cu noti:</p>
+    <ul>
+${items}
+    </ul>
+</body>
+
+</html>
+`;
+        }
+
+        function download(name, content, mime = "text/html") {
+            const blob = new Blob([content], { type: mime + ";charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url; a.download = name;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+
+        /* ---------- sync editor DOM -> state ---------- */
+        function syncCurrent() {
+            if (current < 0) return;
+            const t = project.texts[current];
+            t.title = $("#f-title").value.trim();
+            let fn = $("#f-file").value.trim() || slug(t.title) + ".html";
+            if (!/\.html?$/.test(fn)) fn += ".html";
+            t.filename = fn;
+            t.rows = [...document.querySelectorAll("#rows .row")].map(row => ({
+                scn: serializeBox(row.querySelector(".box.scn")),
+                ita: serializeBox(row.querySelector(".box.ita")),
+                eng: serializeBox(row.querySelector(".box.eng"))
+            }));
+        }
+
+        /* ---------- render sidebar ---------- */
+        function renderList() {
+            const list = $("#text-list");
+            list.innerHTML = "";
+            project.texts.forEach((t, i) => {
+                const el = document.createElement("div");
+                el.className = "text-item" + (i === current ? " active" : "");
+                const label = document.createElement("span");
+                label.textContent = t.title || t.filename || "(senza tìtulu)";
+                const del = document.createElement("button");
+                del.className = "del"; del.textContent = "✕"; del.title = "Scancella testu";
+                del.onclick = e => {
+                    e.stopPropagation();
+                    if (!confirm("Scancillari u testu?")) return;
+                    project.texts.splice(i, 1);
+                    if (current >= project.texts.length) current = project.texts.length - 1;
+                    renderAll();
+                };
+                el.onclick = () => { syncCurrent(); current = i; renderAll(); };
+                el.appendChild(label); el.appendChild(del);
+                list.appendChild(el);
+            });
+        }
+
+        /* ---------- render the editor for the current text ---------- */
+        function renderEditor() {
+            const ws = $("#workspace"), empty = $("#empty");
+            if (current < 0) { ws.hidden = true; empty.hidden = false; return; }
+            ws.hidden = false; empty.hidden = true;
+
+            const t = project.texts[current];
+            $("#f-title").value = t.title || "";
+            $("#f-file").value = t.filename || "";
+
+            const rows = $("#rows");
+            rows.innerHTML = "";
+            (t.rows.length ? t.rows : [{ scn: "", ita: "", eng: "" }]).forEach(r => rows.appendChild(makeRow(r.scn, r.ita, r.eng)));
+        }
+
+        function makeRow(scn, ita, eng) {
+            const row = document.createElement("div");
+            row.className = "row";
+
+            const scnBox = document.createElement("div");
+            scnBox.className = "box scn"; scnBox.contentEditable = "true";
+            scnBox.dataset.ph = "Testu sicilianu..."; scnBox.innerHTML = scn || "";
+            wireBox(scnBox);
+
+            const itaBox = document.createElement("div");
+            itaBox.className = "box ita"; itaBox.contentEditable = "true";
+            itaBox.dataset.ph = "Traduzzioni taliana..."; itaBox.innerHTML = ita || "";
+            wireBox(itaBox);
+
+            const engBox = document.createElement("div");
+            engBox.className = "box eng"; engBox.contentEditable = "true";
+            engBox.dataset.ph = "Traduzzioni 'n ngrisi..."; engBox.innerHTML = eng || "";
+            wireBox(engBox);
+
+            const del = document.createElement("button");
+            del.className = "row-del"; del.textContent = "✕"; del.title = "Leva paràgrafu";
+            del.onclick = () => { if (document.querySelectorAll("#rows .row").length > 1) row.remove(); else { scnBox.innerHTML = ""; itaBox.innerHTML = ""; engBox.innerHTML = ""; } };
+
+            row.append(scnBox, itaBox, engBox, del);
+            return row;
+        }
+
+        /* ---------- per-box behaviour ---------- */
+        function wireBox(box) {
+            // paste as plain text
+            box.addEventListener("paste", e => {
+                e.preventDefault();
+                const txt = (e.clipboardData || window.clipboardData).getData("text/plain");
+                document.execCommand("insertText", false, txt);
+            });
+            // typing dismisses the create-popover
+            box.addEventListener("input", () => { if (!pop.editing) hidePop(); });
+            // selection / click decides create vs edit
+            box.addEventListener("mouseup", () => setTimeout(() => onSelect(box), 0));
+            box.addEventListener("keyup", e => {
+                if (e.key === "Escape") return;
+                if (e.shiftKey || e.key.startsWith("Arrow")) setTimeout(() => onSelect(box), 0);
+            });
+        }
+
+        function onSelect(box) {
+            const sel = window.getSelection();
+            if (!sel.rangeCount) return hidePop();
+            const range = sel.getRangeAt(0);
+
+            if (sel.isCollapsed) {
+                // clicking inside an existing note opens edit mode
+                let node = sel.anchorNode;
+                const noteEl = (node.nodeType === 1 ? node : node.parentElement);
+                const hit = noteEl && noteEl.closest ? noteEl.closest("note-scn") : null;
+                if (hit && box.contains(hit)) openEdit(hit, box);
+                else hidePop();
+                return;
+            }
+            if (!box.contains(range.commonAncestorContainer)) return hidePop();
+            openCreate(range, box);
+        }
+
+        /* ---------- popover ---------- */
+        const pop = { el: $("#pop"), editing: null, range: null, box: null, tipo: null };
+        const swatches = $("#swatches");
+
+        TYPES.forEach(ty => {
+            const b = document.createElement("button");
+            b.className = "swatch"; b.style.background = ty.color;
+            b.textContent = ty.id; b.dataset.id = ty.id;
+            b.onclick = () => {
+                pop.tipo = ty.id;
+                [...swatches.children].forEach(c => c.classList.toggle("sel", c.dataset.id === ty.id));
+            };
+            swatches.appendChild(b);
+        });
+
+        function positionPop(rect) {
+            const el = pop.el; el.classList.add("open");
+            const w = el.offsetWidth, h = el.offsetHeight;
+            let left = Math.min(Math.max(8, rect.left), window.innerWidth - w - 8);
+            let top = rect.top - h - 8;
+            if (top < 8) top = rect.bottom + 8;
+            el.style.left = left + "px";
+            el.style.top = top + "px";
+        }
+
+        function setTipo(id) {
+            pop.tipo = id;
+            [...swatches.children].forEach(c => c.classList.toggle("sel", c.dataset.id === id));
+        }
+
+        function openCreate(range, box) {
+            pop.editing = null; pop.range = range.cloneRange(); pop.box = box;
+            setTipo(null); $("#pop-note").value = "";
+            $("#remove").hidden = true;
+            positionPop(range.getBoundingClientRect());
+            $("#pop-note").focus();
+        }
+
+        function openEdit(note, box) {
+            pop.editing = note; pop.range = null; pop.box = box;
+            setTipo(note.getAttribute("data-type"));
+            $("#pop-note").value = note.getAttribute("data-note") || "";
+            $("#remove").hidden = false;
+            positionPop(note.getBoundingClientRect());
+            $("#pop-note").focus();
+        }
+
+        function hidePop() {
+            pop.el.classList.remove("open");
+            pop.editing = null; pop.range = null; pop.tipo = null;
+        }
+
+        function wrapRange(range, tipo, nota) {
+            const note = document.createElement("note-scn");
+            note.setAttribute("data-type", tipo);
+            note.setAttribute("data-note", nota);
+            note.setAttribute("tabindex", "0");
+            try {
+                range.surroundContents(note);
+            } catch (err) {
+                const frag = range.extractContents();
+                note.appendChild(frag);
+                range.insertNode(note);
+            }
+            // flatten any nested notes that got swallowed
+            note.querySelectorAll("note-scn").forEach(inner => {
+                while (inner.firstChild) inner.parentNode.insertBefore(inner.firstChild, inner);
+                inner.remove();
+            });
+        }
+
+        $("#pop-save").onclick = () => {
+            const nota = $("#pop-note").value.trim();
+            if (pop.editing) {
+                if (pop.tipo) pop.editing.setAttribute("data-type", pop.tipo);
+                pop.editing.setAttribute("data-note", nota);
+            } else {
+                if (!pop.tipo) { alert("Prima scarta un culuri."); return; }
+                if (pop.range) wrapRange(pop.range, pop.tipo, nota);
+            }
+            hidePop();
+        };
+        $("#remove").onclick = () => {
+            const n = pop.editing;
+            if (n) {
+                const p = n.parentNode;
+                while (n.firstChild) p.insertBefore(n.firstChild, n);
+                p.removeChild(n); p.normalize();
+            }
+            hidePop();
+        };
+        $("#pop-cancel").onclick = hidePop;
+        document.addEventListener("keydown", e => { if (e.key === "Escape") hidePop(); });
+        document.addEventListener("mousedown", e => {
+            if (!pop.el.contains(e.target) && !e.target.closest(".box")) hidePop();
+        });
+
+        /* ---------- toolbar actions ---------- */
+        function newText() {
+            syncCurrent();
+            project.texts.push({ id: uid(), title: "", filename: "", rows: [{ scn: "", ita: "", eng: "" }] });
+            current = project.texts.length - 1;
+            renderAll();
+            $("#f-title").focus();
+        }
+
+        function renderAll() { renderList(); renderEditor(); }
+
+        $("#btn-new").onclick = newText;
+        $("#btn-add-row").onclick = () => $("#rows").appendChild(makeRow("", "", ""));
+
+        $("#btn-export").onclick = () => { syncCurrent(); const t = project.texts[current]; download(t.filename, buildText(t)); };
+        $("#btn-index").onclick = () => { syncCurrent(); download("index.html", buildIndex()); };
+        $("#btn-export-all").onclick = () => {
+            syncCurrent();
+            project.texts.forEach((t, i) => setTimeout(() => download(t.filename, buildText(t)), i * 250));
+            setTimeout(() => download("index.html", buildIndex()), project.texts.length * 250);
+        };
+
+        $("#btn-preview").onclick = () => {
+            syncCurrent();
+            const html = buildText(project.texts[current]).replace(
+                '<link rel="stylesheet" href="stili.css">',
+                "<style>" + STILI_CSS + "</style>"
+            );
+            const w = window.open();
+            w.document.write(html); w.document.close();
+        };
+
+        /* ---------- title / filename live updates ---------- */
+        $("#f-title").addEventListener("input", () => {
+            if (current < 0) return;
+            project.texts[current].title = $("#f-title").value;
+            const f = $("#f-file");
+            if (!f.value.trim()) f.placeholder = slug($("#f-title").value) + ".html";
+            renderList();
+        });
+
+        /* ---------- import existing corpus HTML ---------- */
+        $("#btn-import").onclick = () => $("#file-html").click();
+        $("#file-html").onchange = e => {
+            syncCurrent();
+            [...e.target.files].forEach(readHTML);
+            e.target.value = "";
+        };
+
+        function readHTML(file) {
+            const r = new FileReader();
+            r.onload = () => {
+                const doc = new DOMParser().parseFromString(r.result, "text/html");
+                const title = (doc.querySelector("h1")?.textContent || doc.querySelector("title")?.textContent || file.name).trim();
+                const rows = [...doc.querySelectorAll(".text-row, .riga-testu")].map(rt => ({
+                    scn: importCol(rt.querySelector(".column-scn p, .colonna-scn p") || rt.querySelector(".column-scn, .colonna-scn")),
+                    ita: importCol(rt.querySelector(".column-ita p, .colonna-ita p") || rt.querySelector(".column-ita, .colonna-ita")),
+                    eng: importCol(rt.querySelector(".column-eng p") || rt.querySelector(".column-eng"))
+                }));
+                project.texts.push({
+                    id: uid(), title, filename: file.name,
+                    rows: rows.length ? rows : [{ scn: "", ita: "", eng: "" }]
+                });
+                current = project.texts.length - 1;
+                renderAll();
+            };
+            r.readAsText(file);
+        }
+
+        // Read any past format (note/note-scn, tipo|data-tipo|data-type, nota|data-nota|data-note)
+        // and re-emit the current one. Drops "..." placeholders.
+        function importCol(el) {
+            if (!el) return "";
+            const clone = el.cloneNode(true);
+            clone.querySelectorAll("note, note-scn").forEach(n => {
+                let type = n.getAttribute("data-type") || n.getAttribute("data-tipo") || n.getAttribute("tipo") || "";
+                type = TYPE_ALIASES[type] || type;
+                const note = n.getAttribute("data-note") || n.getAttribute("data-nota") || n.getAttribute("nota") || "";
+                const fresh = document.createElement("note-scn");
+                fresh.setAttribute("data-type", type);
+                fresh.setAttribute("data-note", note);
+                fresh.setAttribute("tabindex", "0");
+                while (n.firstChild) fresh.appendChild(n.firstChild);
+                n.replaceWith(fresh);
+            });
+            let html = clone.innerHTML.replace(/\s+/g, " ").trim();
+            return html === "..." ? "" : html;
+        }
+
+        /* ---------- project save / load (.json) ---------- */
+        $("#btn-save-proj").onclick = () => {
+            syncCurrent();
+            download("corpus-project.json", JSON.stringify(project, null, 2), "application/json");
+        };
+        $("#btn-load-proj").onclick = () => $("#file-proj").click();
+        $("#file-proj").onchange = e => {
+            const f = e.target.files[0]; if (!f) return;
+            const r = new FileReader();
+            r.onload = () => {
+                try {
+                    const data = JSON.parse(r.result);
+                    if (!data.texts) throw new Error("no texts");
+                    project = data;
+                    current = project.texts.length ? 0 : -1;
+                    renderAll();
+                } catch (err) { alert("Nun è pussìbbili lèggiri u pricu dû pruggettu."); }
+            };
+            r.readAsText(f);
+            e.target.value = "";
+        };
+
+        renderAll();
+    </script>
+</body>
+
+</html>
